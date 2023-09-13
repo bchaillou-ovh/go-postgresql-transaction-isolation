@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func seedDb(conn *pgx.Conn) {
+func seedDb(conn *pgxpool.Pool) {
 	sql := `
 DROP TABLE IF EXISTS users;
 	

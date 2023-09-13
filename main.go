@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
@@ -23,46 +23,36 @@ func main() {
 		host, port, user, password, dbname)
 	ctx = context.Background()
 
-	conn1, err := pgx.Connect(ctx, connString)
+	conn1, err := pgxpool.New(ctx, connString)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
 		os.Exit(1)
 	}
-	defer conn1.Close(ctx)
+	defer conn1.Close()
 
-	conn2, err := pgx.Connect(ctx, connString)
+	conn2, err := pgxpool.New(ctx, connString)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
 		os.Exit(1)
 	}
-	defer conn2.Close(ctx)
+	defer conn2.Close()
 
 	type ReadPhenomena struct {
 		name            string
 		isolationLevels []string
-		testFunction    func(conn1, conn2 *pgx.Conn, isolationLevel string)
+		testFunction    func(conn1, conn2 *pgxpool.Pool, isolationLevel string)
 	}
 
 	phenomenas := []ReadPhenomena{
 		{
-			name:            "Dirty read",
-			isolationLevels: []string{"READ UNCOMMITTED", "READ COMMITTED"},
-			testFunction:    dirtyRead,
+			name:            "Dirty read (insert)",
+			isolationLevels: []string{"READ UNCOMMITTED", "READ COMMITTED", "REPEATABLE READ", "SERIALIZABLE"},
+			testFunction:    dirtyReadInsert,
 		},
 		{
-			name:            "Nonrepeatable read",
-			isolationLevels: []string{"READ COMMITTED", "REPEATABLE READ"},
-			testFunction:    nonrepeatableRead,
-		},
-		{
-			name:            "Phantom read",
-			isolationLevels: []string{"READ COMMITTED", "REPEATABLE READ"},
-			testFunction:    phantomRead,
-		},
-		{
-			name:            "Serialization anomaly",
-			isolationLevels: []string{"REPEATABLE READ", "SERIALIZABLE"},
-			testFunction:    serializationAnomaly,
+			name:            "Dirty read (update)",
+			isolationLevels: []string{"READ UNCOMMITTED", "READ COMMITTED", "REPEATABLE READ", "SERIALIZABLE"},
+			testFunction:    dirtyReadUpdate,
 		},
 	}
 
@@ -78,13 +68,13 @@ func main() {
 	}
 }
 
-func printTable(conn *pgx.Conn) {
+func printTable(conn *pgxpool.Pool) {
 	fmt.Printf("Final table state:\n")
 	rows, _ := conn.Query(ctx, "SELECT id, name, balance, group_id FROM users ORDER BY id")
 	for rows.Next() {
 		var name []byte
 		var id, balance, group_id int
-		rows.Scan(&id, &name, &balance, &group_id)
+		_ = rows.Scan(&id, &name, &balance, &group_id)
 		fmt.Printf("%2d | %10s | %5d | %d\n", id, name, balance, group_id)
 	}
 }
